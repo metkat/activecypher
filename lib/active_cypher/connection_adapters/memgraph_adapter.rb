@@ -62,6 +62,10 @@ module ActiveCypher
       def id_handler
         self.class
       end
+      
+      def id_type_conversion(incoming)
+        return incoming.to_i
+      end
 
       # Memgraph uses different constraint syntax than Neo4j
       def ensure_schema_migration_constraint
