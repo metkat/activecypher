@@ -195,6 +195,47 @@ module ActiveCypher
         instance
       end
 
+      def find_or_create(from_node:, to_node:, **attribute_kwargs) # what about nondirectional?
+        unless from_node.persisted? && to_node.persisted? 
+          raise ActiveCypher::RecordNotSaved, "from (#{from_node}) or to (#{to_node}) wasn't already persisted"
+        end
+        
+        unless from_node.class.to_s == self.from_class && to_node.class.to_s == self.to_class
+          raise ActiveCypher::AssociationTypeMismatch, "relationship from or to class expectations violated: were #{from_node.class} / #{to_node.class}, expected #{self.from_class} / #{self.to_class}"
+        end
+        
+        params = {from_label: from_node.class.labels.first, to_label: to_node.class.labels.first, rel_type: self.type, from_id: from_node.internal_id, to_id: to_node.internal_id}
+        cypher = +"
+          MATCH (from:$from_label)[IN_ARROW][rel:$rel_type][OUT_ARROW](to:$to_label)
+          WHERE id(from) = $from_id AND id(to) = $to_id
+          RETURN count(rel) as count, id(rel) as rel_id
+          LIMIT 1
+        "
+        # if direction == :in
+        #   cypher.sub!('[IN_ARROW]', '<-')
+        #   cypher.sub!('[OUT_ARROW]', '-')
+        # elsif direction == :out
+        #   cypher.sub!('[IN_ARROW]', '-')
+        #   cypher.sub!('[OUT_ARROW]', '->')
+        # else
+          cypher.sub!('[IN_ARROW]', '-')
+          cypher.sub!('[OUT_ARROW]', '-')
+        # end
+        # Rails.logger.debug(cypher.inspect)          
+        # Rails.logger.debug(params.inspect)
+        result = connection.execute_cypher(cypher, params, 'Check for existing relationship')
+        row = result.first
+        if row.nil?
+          return self.create!(attribute_kwargs, from_node: from_node, to_node: to_node,  )
+        else
+          return self.find_by(internal_id: row[:rel_id])
+        end
+      end
+
+      def merge(attrs = {}, from_node:, to_node:, direction: :both)
+        raise "merge for relationships is not viable without resorting to uuids, Memgraph is determined not to let you use their internal ids"
+      end
+
       # -- Querying methods ----------------------------------------
       # Find the first relationship matching the given attributes
       # Like finding a needle in a haystack, if the haystack was made of graph edges
@@ -208,7 +249,8 @@ module ActiveCypher
         params = {}
 
         if attributes.key?(:internal_id)
-          where_clause = "id(r) = #{attributes[:internal_id]}"
+          where_clause = "id(r) = $p1"
+          params['p1'] = attributes[:internal_id]
         else
           attributes.each_with_index do |(key, value), index|
             param_name = :"p#{index + 1}"
@@ -242,8 +284,8 @@ module ActiveCypher
         to_node_id = row[:to_node][1][0] || row['to_node'][1][0]
         
         # this is extra queries, but easier than navigating instantiation from the row data
-        from_node = Object.const_get(EnjoysRel.from_class).find(from_node_id)
-        to_node = Object.const_get(EnjoysRel.to_class).find(to_node_id)
+        from_node = Object.const_get(self.from_class).find(from_node_id)
+        to_node = Object.const_get(self.to_class).find(to_node_id)
 
         # Extract relationship properties from the relationship data
         # Memgraph returns relationships wrapped as [type_code, [actual_data]]
