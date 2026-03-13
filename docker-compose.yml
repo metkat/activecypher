@@ -10,7 +10,7 @@ services:
 
   memgraph:
     image: memgraph/memgraph-mage:latest
-    container_name: memgraph-activecypher
+    container_name: memgraph-activecypher-testing
     pull_policy: always
     ports:
       - "17688:7687" # Bolt protocol (host:container)
@@ -23,14 +23,14 @@ services:
 
   memgraphlab:
     image: memgraph/lab:latest
-    container_name: memgraph-lab-activecypher
+    container_name: memgraph-lab-activecypher-testing
     pull_policy: always
     ports:
       - "3000:3000" # Web UI
     depends_on:
       - memgraph
     environment:
-      - QUICK_CONNECT_MG_HOST=memgraph-activecypher
+      - QUICK_CONNECT_MG_HOST=memgraph-activecypher-testing
       - QUICK_CONNECT_MG_PORT=7687
 volumes:
   postgres_data:

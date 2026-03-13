@@ -18,7 +18,7 @@ class RelationshipMergeTest < ActiveSupport::TestCase
   end
   
   
-  test "merge succeeds and returns correct value when relationship already exists" do
+  test 'merge succeeds and returns correct value when relationship already exists' do
     alice = PersonNode.create(name: 'Alice')
     chess = HobbyNode.create(name: 'Chess')
     rel = EnjoysRel.create(from_node: alice, to_node: chess)

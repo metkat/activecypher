@@ -14,7 +14,7 @@ class RelationshipMergeTest < ActiveSupport::TestCase
     assert_equal internal_id_type, Integer
   end
   
-  test "id left as string for MemGraph" do
+  test 'id left as string for MemGraph' do
     preservation_aux = CompanyNode.create(name: 'PreservationAux')
     internal_id_type = preservation_aux.call_logs.cyrel_query.to_cypher[1][:p1].class
     assert_equal internal_id_type, String
