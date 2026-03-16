@@ -278,8 +278,49 @@ module ActiveCypher
                                      'Maybe these nodes were never meant to be connected? ' \
                                      'Or perhaps their relationship status is... complicated?')
       end
+      
+      def find_or_create(from_node:, to_node:, **attribute_kwargs)
+        # what about nondirectional?
+        # just using cypher merge is impractical, Memgraph *really* doesn't make using their internal id easy
+        
+        unless from_node.persisted? && to_node.persisted? 
+          raise ActiveCypher::RecordNotSaved, "from (#{from_node}) or to (#{to_node}) wasn't already persisted"
+        end
+        
+        unless from_node.class.to_s == self.from_class && to_node.class.to_s == self.to_class
+          raise ActiveCypher::AssociationTypeMismatch, "relationship from or to class expectations violated: were #{from_node.class} / #{to_node.class}, expected #{self.from_class} / #{self.to_class}"
+        end
+        
+        params = {from_label: from_node.class.labels.first, to_label: to_node.class.labels.first, rel_type: self.type, from_id: from_node.internal_id, to_id: to_node.internal_id}
+        cypher = +"
+          MATCH (from:$from_label)[IN_ARROW][rel:$rel_type][OUT_ARROW](to:$to_label)
+          WHERE id(from) = $from_id AND id(to) = $to_id
+          RETURN count(rel) as count, id(rel) as rel_id
+          LIMIT 1
+        "
+        # if direction == :in
+        #   cypher.sub!('[IN_ARROW]', '<-')
+        #   cypher.sub!('[OUT_ARROW]', '-')
+        # elsif direction == :out
+        #   cypher.sub!('[IN_ARROW]', '-')
+        #   cypher.sub!('[OUT_ARROW]', '->')
+        # else
+          cypher.sub!('[IN_ARROW]', '-')
+          cypher.sub!('[OUT_ARROW]', '-')
+        # end
+        # Rails.logger.debug(cypher.inspect)          
+        # Rails.logger.debug(params.inspect)
+        result = connection.execute_cypher(cypher, params, 'Check for existing relationship')
+        row = result.first
+        if row.nil?
+          return self.create!(attribute_kwargs, from_node: from_node, to_node: to_node,  )
+        else
+          return self.find_by(internal_id: row[:rel_id])
+        end
+      end
+      
     end
-
+    
     # --------------------------------------------------------------
     # Life‑cycle
     # --------------------------------------------------------------
